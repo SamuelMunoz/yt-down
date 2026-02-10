@@ -1,0 +1,175 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main, develop]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.gitversion.outputs.semVer }}
+      fullSemVer: ${{ steps.gitversion.outputs.fullSemVer }}
+      assemblySemVer: ${{ steps.gitversion.outputs.assemblySemVer }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v0.10.2
+      with:
+        versionSpec: '5.x'
+    
+    - name: Determine Version
+      id: gitversion
+      uses: gittools/actions/gitversion/execute@v0.10.2
+      with:
+        useConfigFile: true
+        configFilePath: GitVersion.yml
+
+  build:
+    needs: version
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Build
+      run: dotnet build --configuration Release --no-restore /p:Version=${{ needs.version.outputs.assemblySemVer }}
+    
+    - name: Publish x64
+      run: |
+        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Version=${{ needs.version.outputs.assemblySemVer }} -o ./publish/x64
+    
+    - name: Publish x86
+      run: |
+        dotnet publish -c Release -r win-x86 --self-contained true -p:PublishSingleFile=true -p:Version=${{ needs.version.outputs.assemblySemVer }} -o ./publish/x86
+    
+    - name: Create Test Certificate
+      run: |
+        $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=GitHubActions" -KeyUsage DigitalSignature -FriendlyName "YtDownloader Test Cert" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+        $certPassword = ConvertTo-SecureString -String "password123" -Force -AsPlainText
+        Export-PfxCertificate -cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" -FilePath "$env:TEMP\testcert.pfx" -Password $certPassword
+        Write-Host "Certificate Thumbprint: $($cert.Thumbprint)"
+    
+    - name: Generate MSIX Images
+      run: |
+        Add-Type -AssemblyName System.Drawing
+        powershell.exe -ExecutionPolicy Bypass -File "Installer\Generate-Images.ps1"
+    
+    - name: Update MSIX Manifest Version
+      run: |
+        $manifestPath = "Installer/AppxManifest.xml"
+        [xml]$manifest = Get-Content $manifestPath
+        $version = "${{ needs.version.outputs.assemblySemVer }}"
+        $versionParts = $version.Split('.')
+        # Ensure we have 4 parts for MSIX version
+        while ($versionParts.Length -lt 4) {
+            $versionParts += "0"
+        }
+        $msixVersion = [string]::Join('.', $versionParts)
+        $manifest.Package.Identity.Version = $msixVersion
+        $manifest.Save($manifestPath)
+        Write-Host "Updated MSIX version to: $msixVersion"
+    
+    - name: Create MSIX Package x64
+      run: |
+        # Create MSIX package structure
+        New-Item -ItemType Directory -Force -Path ./msix/x64
+        Copy-Item -Path ./publish/x64/* -Destination ./msix/x64/ -Recurse -Force
+        Copy-Item -Path Installer/AppxManifest.xml -Destination ./msix/x64/ -Force
+        
+        # Copy images
+        if (Test-Path "./Installer/Images") {
+            New-Item -ItemType Directory -Force -Path ./msix/x64/Images
+            Copy-Item -Path ./Installer/Images/* -Destination ./msix/x64/Images/ -Recurse -Force
+        }
+        
+        # Create MSIX using makeappx
+        & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\makeappx.exe" pack /d ./msix/x64 /p ./YtDownloader-v${{ needs.version.outputs.version }}-x64.msix /o
+        
+        # Sign MSIX with test certificate
+        & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" sign /fd SHA256 /a /f $env:TEMP\testcert.pfx /p password123 ./YtDownloader-v${{ needs.version.outputs.version }}-x64.msix
+    
+    - name: Create MSIX Package x86
+      run: |
+        # Update manifest architecture for x86
+        $manifestPath = "Installer/AppxManifest.xml"
+        [xml]$manifest = Get-Content $manifestPath
+        $manifest.Package.Identity.ProcessorArchitecture = "x86"
+        $manifest.Save("./msix/AppxManifest-x86.xml")
+        
+        # Create MSIX package structure
+        New-Item -ItemType Directory -Force -Path ./msix/x86
+        Copy-Item -Path ./publish/x86/* -Destination ./msix/x86/ -Recurse -Force
+        Copy-Item -Path ./msix/AppxManifest-x86.xml -Destination ./msix/x86/AppxManifest.xml -Force
+        
+        # Copy images
+        if (Test-Path "./Installer/Images") {
+            New-Item -ItemType Directory -Force -Path ./msix/x86/Images
+            Copy-Item -Path ./Installer/Images/* -Destination ./msix/x86/Images/ -Recurse -Force
+        }
+        
+        # Create MSIX using makeappx
+        & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\makeappx.exe" pack /d ./msix/x86 /p ./YtDownloader-v${{ needs.version.outputs.version }}-x86.msix /o
+        
+        # Sign MSIX with test certificate
+        & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" sign /fd SHA256 /a /f $env:TEMP\testcert.pfx /p password123 ./YtDownloader-v${{ needs.version.outputs.version }}-x86.msix
+    
+    - name: Create ZIP archives
+      run: |
+        Compress-Archive -Path ./publish/x64/* -DestinationPath ./YtDownloader-v${{ needs.version.outputs.version }}-win-x64.zip
+        Compress-Archive -Path ./publish/x86/* -DestinationPath ./YtDownloader-v${{ needs.version.outputs.version }}-win-x86.zip
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: YtDownloader-v${{ needs.version.outputs.version }}
+        path: |
+          ./YtDownloader-v${{ needs.version.outputs.version }}-win-x64.zip
+          ./YtDownloader-v${{ needs.version.outputs.version }}-win-x86.zip
+          ./YtDownloader-v${{ needs.version.outputs.version }}-x64.msix
+          ./YtDownloader-v${{ needs.version.outputs.version }}-x86.msix
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: YtDownloader-v${{ needs.version.outputs.version }}
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        name: Release ${{ needs.version.outputs.fullSemVer }}
+        files: |
+          YtDownloader-v${{ needs.version.outputs.version }}-win-x64.zip
+          YtDownloader-v${{ needs.version.outputs.version }}-win-x86.zip
+          YtDownloader-v${{ needs.version.outputs.version }}-x64.msix
+          YtDownloader-v${{ needs.version.outputs.version }}-x86.msix
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

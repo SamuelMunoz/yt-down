@@ -17,9 +17,39 @@ Aplicación de escritorio WPF en .NET para descargar videos de YouTube y otras p
 - **Recordar última carpeta utilizada** - La aplicación guarda automáticamente la última carpeta de descarga
 - **Recordar último formato seleccionado** - Persiste tu preferencia de formato
 
+## Descargas
+
+Las versiones compiladas están disponibles en [GitHub Releases](https://github.com/tu-usuario/yt-down/releases).
+
+### Opciones de descarga
+
+| Tipo | Archivo | Descripción |
+|------|---------|-------------|
+| Instalador x64 | `YtDownloader-v{version}-x64.msix` | Instalador moderno de Windows (recomendado) |
+| Instalador x86 | `YtDownloader-v{version}-x86.msix` | Para sistemas de 32 bits |
+| Portable x64 | `YtDownloader-v{version}-win-x64.zip` | Versión portable sin instalación |
+| Portable x86 | `YtDownloader-v{version}-win-x86.zip` | Versión portable 32 bits |
+
+### Instalación con MSIX
+
+1. Descarga el archivo `.msix` correspondiente a tu arquitectura
+2. Haz doble clic en el archivo
+3. Windows abrirá el instalador de aplicaciones
+4. Haz clic en "Instalar"
+
+**Nota**: Las versiones de desarrollo usan un certificado de prueba. Para instalarlas, primero instala el certificado como administrador:
+```powershell
+# Ejecutar como Administrador
+certutil -addstore -f "Root" "C:\ruta\al\certificado.cer"
+```
+
+### Versión Portable
+
+Simplemente extrae el ZIP y ejecuta `YtDownloader.exe`. No requiere instalación.
+
 ## Requisitos
 
-1. **.NET 10.0 SDK** o superior
+1. **.NET 10.0 SDK** o superior (solo para desarrollo)
 2. **yt-dlp** instalado y disponible en el PATH
 
 ### Instalación de yt-dlp
