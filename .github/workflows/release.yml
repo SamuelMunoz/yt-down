@@ -78,12 +78,27 @@ jobs:
     needs: [version, build]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
     
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
         name: YtDownloader-v${{ needs.version.outputs.version }}
+    
+    - name: Create tag
+      run: |
+        git tag -a "v${{ needs.version.outputs.version }}" -m "Release v${{ needs.version.outputs.version }}"
+        git push origin "v${{ needs.version.outputs.version }}"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Create Release
       uses: softprops/action-gh-release@v1
