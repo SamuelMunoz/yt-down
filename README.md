@@ -19,29 +19,14 @@ Aplicación de escritorio WPF en .NET para descargar videos de YouTube y otras p
 
 ## Descargas
 
-Las versiones compiladas están disponibles en [GitHub Releases](https://github.com/tu-usuario/yt-down/releases).
+Las versiones compiladas están disponibles automáticamente en [GitHub Releases](https://github.com/tu-usuario/yt-down/releases) en cada push a la rama `main`.
 
 ### Opciones de descarga
 
 | Tipo | Archivo | Descripción |
 |------|---------|-------------|
-| Instalador x64 | `YtDownloader-v{version}-x64.msix` | Instalador moderno de Windows (recomendado) |
-| Instalador x86 | `YtDownloader-v{version}-x86.msix` | Para sistemas de 32 bits |
-| Portable x64 | `YtDownloader-v{version}-win-x64.zip` | Versión portable sin instalación |
-| Portable x86 | `YtDownloader-v{version}-win-x86.zip` | Versión portable 32 bits |
-
-### Instalación con MSIX
-
-1. Descarga el archivo `.msix` correspondiente a tu arquitectura
-2. Haz doble clic en el archivo
-3. Windows abrirá el instalador de aplicaciones
-4. Haz clic en "Instalar"
-
-**Nota**: Las versiones de desarrollo usan un certificado de prueba. Para instalarlas, primero instala el certificado como administrador:
-```powershell
-# Ejecutar como Administrador
-certutil -addstore -f "Root" "C:\ruta\al\certificado.cer"
-```
+| Portable x64 | `YtDownloader-v{version}-win-x64.zip` | Versión portable sin instalación (64 bits) |
+| Portable x86 | `YtDownloader-v{version}-win-x86.zip` | Versión portable (32 bits) |
 
 ### Versión Portable
 
@@ -130,6 +115,16 @@ YtDownloader/
 - La aplicación verifica automáticamente si yt-dlp está instalado al iniciar
 - Puedes descargar videos de múltiples plataformas soportadas por yt-dlp (YouTube, Vimeo, Dailymotion, etc.)
 - La conversión a MP3/M4A requiere FFmpeg instalado (yt-dlp lo descarga automáticamente si no está presente)
+
+## CI/CD y Versionado
+
+El proyecto utiliza GitHub Actions para CI/CD automático:
+
+- **GitVersion**: Calcula automáticamente el número de versión basado en los commits
+- **Build**: Compila la aplicación para arquitecturas x64 y x86
+- **Release**: Crea automáticamente un tag y release en GitHub en cada push a `main`
+
+El versionado sigue [Semantic Versioning](https://semver.org/) mediante GitVersion.
 
 ## Licencia
 
